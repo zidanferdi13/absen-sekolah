@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: absen_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: absen
+      POSTGRES_PASSWORD: absen
+      POSTGRES_DB: absen_sekolah
+      TZ: Asia/Jakarta
+    ports:
+      - "5432:5432"
+    volumes:
+      - absen_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U absen -d absen_sekolah"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  absen_pgdata:

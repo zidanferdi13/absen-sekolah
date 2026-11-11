@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: absen_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-absen}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-absen}
+      POSTGRES_DB: ${POSTGRES_DB:-absen_sekolah}
+      TZ: Asia/Jakarta
+    volumes:
+      - absen_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-absen} -d ${POSTGRES_DB:-absen_sekolah}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./be
+    container_name: absen_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      HOST: 0.0.0.0
+      DATABASE_URL: postgresql://${POSTGRES_USER:-absen}:${POSTGRES_PASSWORD:-absen}@postgres:5432/${POSTGRES_DB:-absen_sekolah}?schema=public
+      SCHOOL_TIMEZONE: Asia/Jakarta
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET wajib diisi}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET wajib diisi}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-15m}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-7d}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      DEVICE_RATE_LIMIT_PER_MINUTE: ${DEVICE_RATE_LIMIT_PER_MINUTE:-60}
+    ports:
+      - "3001:3001"
+
+  frontend:
+    build:
+      context: ./fe
+    container_name: absen_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      BACKEND_URL: http://backend:3001
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+
+volumes:
+  absen_pgdata:

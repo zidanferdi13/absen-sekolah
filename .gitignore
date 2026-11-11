@@ -1,0 +1,32 @@
+# Dependency & artefak build
+node_modules/
+dist/
+build/
+.next/
+out/
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Log & OS
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Prisma
+be/prisma/migrations/dev.db*
+
+# Export sementara
+*.xlsx
+!docs/**/*.xlsx

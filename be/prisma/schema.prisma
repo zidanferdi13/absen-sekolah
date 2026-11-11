@@ -1,0 +1,297 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// ENUMS
+// ---------------------------------------------------------------------------
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum PersonType {
+  STUDENT
+  TEACHER
+}
+
+enum TapType {
+  CLOCK_IN
+  CLOCK_OUT
+  PRAYER
+  OTHER
+}
+
+enum PrayerSlot {
+  DHUHA
+  DHUHUR
+  ASHAR
+}
+
+enum TapDecision {
+  ACCEPTED
+  DUPLICATE
+  REJECTED
+  UNKNOWN_CARD
+}
+
+enum RuleScope {
+  GLOBAL
+  CLASS
+  PERSON
+}
+
+enum AttendanceStatus {
+  HADIR
+  TERLAMBAT
+  IZIN
+  SAKIT
+  ALFA
+  LIBUR
+}
+
+enum CardStatus {
+  ACTIVE
+  INACTIVE
+  LOST
+}
+
+enum DeviceStatus {
+  ACTIVE
+  DISABLED
+  MAINTENANCE
+}
+
+// ---------------------------------------------------------------------------
+// AUTH
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(VIEWER)
+  isActive     Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  auditLogs AuditLog[]
+}
+
+// ---------------------------------------------------------------------------
+// MASTER AKADEMIK
+// ---------------------------------------------------------------------------
+
+model AcademicYear {
+  id        String   @id @default(cuid())
+  name      String   @unique // "2025/2026"
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  classes ClassRoom[]
+
+  @@index([isActive])
+}
+
+model ClassRoom {
+  id             String   @id @default(cuid())
+  academicYearId String
+  name           String // "7A"
+  level          String // "7"
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id])
+  students     Person[]
+  rules        TapRule[]
+
+  @@unique([academicYearId, name])
+  @@index([academicYearId])
+}
+
+model Person {
+  id        String     @id @default(cuid())
+  type      PersonType
+  nis       String?    @unique // siswa
+  nip       String?    @unique // guru
+  fullName  String
+  gender    String? // "L" | "P"
+  phone     String?
+  photoUrl  String?
+  classId   String?
+  isActive  Boolean    @default(true)
+  deletedAt DateTime?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  class          ClassRoom?        @relation(fields: [classId], references: [id])
+  cards          RfidCard[]
+  tapLogs        TapLog[]
+  attendance     AttendanceDaily[]
+  rules          TapRule[]
+
+  @@index([type, isActive])
+  @@index([classId])
+  @@index([fullName])
+}
+
+model RfidCard {
+  id         String     @id @default(cuid())
+  uid        String     @unique // hex uppercase, tanpa separator
+  label      String?
+  personId   String?
+  status     CardStatus @default(ACTIVE)
+  assignedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  person Person? @relation(fields: [personId], references: [id])
+
+  @@index([personId, status])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// DEVICE & RULES
+// ---------------------------------------------------------------------------
+
+model Device {
+  id              String       @id @default(cuid())
+  code            String       @unique // "GATE-01"
+  name            String
+  location        String?
+  apiKeyHash      String
+  status          DeviceStatus @default(ACTIVE)
+  firmwareVersion String?
+  ipAddress       String?
+  lastSeenAt      DateTime?
+  config          Json?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  tapLogs TapLog[]
+}
+
+model TapRule {
+  id            String      @id @default(cuid())
+  name          String
+  type          TapType
+  prayerSlot    PrayerSlot?
+  scope         RuleScope   @default(GLOBAL)
+  classId       String?
+  personId      String?
+  daysOfWeek    Int[] // 0=Minggu .. 6=Sabtu
+  startMinute   Int // menit sejak 00:00, 07:00 = 420
+  endMinute     Int
+  minGapMinutes Int         @default(2)
+  priority      Int         @default(0)
+  validFrom     DateTime?   @db.Date
+  validTo       DateTime?   @db.Date
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  class  ClassRoom? @relation(fields: [classId], references: [id])
+  person Person?    @relation(fields: [personId], references: [id])
+
+  @@index([isActive, type])
+  @@index([classId])
+  @@index([personId])
+}
+
+// ---------------------------------------------------------------------------
+// LOG & ATTENDANCE
+// ---------------------------------------------------------------------------
+
+model TapLog {
+  id             String      @id @default(cuid())
+  uid            String
+  deviceId       String
+  personId       String?
+  tappedAt       DateTime    @db.Timestamptz // server clock (otoritatif)
+  deviceTs       DateTime?   @db.Timestamptz // audit drift
+  tapType        TapType?
+  prayerSlot     PrayerSlot?
+  decision       TapDecision
+  ruleId         String?
+  reason         String?
+  rawPayload     Json?
+  idempotencyKey String      @unique
+  createdAt      DateTime    @default(now())
+
+  device Device @relation(fields: [deviceId], references: [id])
+  person Person? @relation(fields: [personId], references: [id])
+
+  @@index([personId, tappedAt])
+  @@index([tappedAt])
+  @@index([uid, tappedAt])
+  @@index([decision, tappedAt])
+}
+
+model AttendanceDaily {
+  id             String           @id @default(cuid())
+  personId       String
+  date           DateTime         @db.Date
+  status         AttendanceStatus @default(ALFA)
+  checkInAt      DateTime?        @db.Timestamptz
+  checkOutAt     DateTime?        @db.Timestamptz
+  lateMinutes    Int              @default(0)
+  prayerDhuhaAt  DateTime?        @db.Timestamptz
+  prayerDhuhurAt DateTime?        @db.Timestamptz
+  prayerAsharAt  DateTime?        @db.Timestamptz
+  note           String?
+  computedAt     DateTime         @default(now())
+
+  person Person @relation(fields: [personId], references: [id])
+
+  @@unique([personId, date])
+  @@index([date, status])
+}
+
+model Holiday {
+  id          String   @id @default(cuid())
+  date        DateTime @db.Date @unique
+  name        String
+  isSchoolDay Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// KONFIGURASI & AUDIT
+// ---------------------------------------------------------------------------
+
+model Setting {
+  key       String   @id // "school.name", "school.startMinute", "school.graceMinutes"
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  action      String // "student.update", "log.correct"
+  entity      String
+  entityId    String
+  before      Json?
+  after       Json?
+  ip          String?
+  createdAt   DateTime @default(now())
+
+  actor User? @relation(fields: [actorUserId], references: [id])
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}

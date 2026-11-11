@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (lint, typecheck, test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: be
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: absen
+          POSTGRES_PASSWORD: absen
+          POSTGRES_DB: absen_test
+          TZ: Asia/Jakarta
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U absen -d absen_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://absen:absen@localhost:5432/absen_test?schema=public
+      JWT_ACCESS_SECRET: ci-access-secret-at-least-16-chars
+      JWT_REFRESH_SECRET: ci-refresh-secret-at-least-16-chars
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: be/package-lock.json
+
+      - name: Install
+        run: npm ci || npm install
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Verify schema applies to database
+        run: npx prisma migrate deploy || npx prisma db push --skip-generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+  frontend:
+    name: Frontend (typecheck, lint, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: fe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: fe/package-lock.json
+
+      - name: Install
+        run: npm ci || npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+        env:
+          BACKEND_URL: http://localhost:3001
+
+  firmware:
+    name: Firmware (PlatformIO build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: uno
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build
+        run: pio run
