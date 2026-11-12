@@ -1,8 +1,21 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { TrendingUp } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useDashboardFilter, withQuery } from '@/components/dashboard-filter';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface TrendPoint {
   date: string;
@@ -14,11 +27,22 @@ interface TrendPoint {
   libur: number;
 }
 
-const SERIES = [
-  { key: 'hadir', label: 'Hadir', color: '#10b981' },
-  { key: 'terlambat', label: 'Terlambat', color: '#f59e0b' },
-  { key: 'alfa', label: 'Alfa', color: '#f43f5e' },
-] as const;
+type SeriesKey = 'hadir' | 'terlambat' | 'alfa';
+
+const SERIES: { key: SeriesKey; label: string; color: string }[] = [
+  { key: 'hadir', label: 'Hadir', color: '#059669' },
+  { key: 'terlambat', label: 'Terlambat', color: '#d97706' },
+  { key: 'alfa', label: 'Alfa', color: '#e11d48' },
+];
+
+const MAX_TREND_DAYS = 90;
+
+function formatDay(value: string): string {
+  return new Date(`${value}T00:00:00Z`).toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+  });
+}
 
 export function AttendanceTrend() {
   const { query, filter, days, from, to } = useDashboardFilter();
@@ -30,108 +54,139 @@ export function AttendanceTrend() {
   });
 
   const points = data?.data ?? [];
-  const maxValue = Math.max(
-    1,
-    ...points.map((point) => Math.max(point.hadir, point.terlambat, point.alfa)),
-  );
-
-  const width = 100;
-  const height = 40;
-
   const scopeLabel =
     filter === 'STUDENT' ? 'siswa' : filter === 'TEACHER' ? 'guru' : 'siswa dan guru';
 
-  function line(key: 'hadir' | 'terlambat' | 'alfa') {
-    if (points.length === 0) return '';
-    return points
-      .map((point, index) => {
-        const x = points.length === 1 ? width / 2 : (index / (points.length - 1)) * width;
-        const y = height - (point[key] / maxValue) * height;
-        return `${index === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
-      })
-      .join(' ');
-  }
+  const totals = points.reduce(
+    (acc, point) => ({
+      hadir: acc.hadir + point.hadir,
+      terlambat: acc.terlambat + point.terlambat,
+      alfa: acc.alfa + point.alfa,
+    }),
+    { hadir: 0, terlambat: 0, alfa: 0 },
+  );
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 lg:col-span-2">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-semibold">
-            Tren {days === 1 ? 'Harian' : `${days} Hari`}
-          </h2>
-          <p className="mt-0.5 text-xs text-slate-500">
-            Rekap harian {scopeLabel} · {from === to ? from : `${from} – ${to}`}
-          </p>
-        </div>
-        <div className="flex gap-3">
-          {SERIES.map((item) => (
-            <span key={item.key} className="flex items-center gap-1.5 text-xs text-slate-600">
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
-              {item.label}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {isLoading && <div className="mt-4 text-sm text-slate-500">Memuat grafik…</div>}
-
-      {isError && (
-        <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
-          Gagal memuat tren kehadiran.
-        </div>
-      )}
-
-      {!isLoading && !isError && points.length === 0 && (
-        <div className="mt-4 flex h-56 items-center justify-center rounded-lg border border-dashed border-slate-300 text-xs text-slate-400">
-          Belum ada data rekap untuk rentang ini.
-        </div>
-      )}
-
-      {points.length > 0 && (
-        <>
-          <svg
-            viewBox={`0 0 ${width} ${height + 4}`}
-            preserveAspectRatio="none"
-            className="mt-4 h-56 w-full overflow-visible"
-            role="img"
-            aria-label="Grafik tren kehadiran 7 hari"
-          >
-            {[0.25, 0.5, 0.75].map((ratio) => (
-              <line
-                key={ratio}
-                x1={0}
-                x2={width}
-                y1={height * ratio}
-                y2={height * ratio}
-                stroke="#e2e8f0"
-                strokeWidth={0.3}
-              />
-            ))}
+    <Card className="lg:col-span-2">
+      <CardHeader
+        icon={TrendingUp}
+        tone="brand"
+        title={`Tren ${days === 1 ? 'Harian' : `${days} Hari`}`}
+        description={`Rekap harian ${scopeLabel} · ${from === to ? from : `${from} – ${to}`}`}
+        action={
+          <div className="flex flex-wrap gap-3">
             {SERIES.map((item) => (
-              <path
-                key={item.key}
-                d={line(item.key)}
-                fill="none"
-                stroke={item.color}
-                strokeWidth={1.2}
-                strokeLinecap="round"
-                vectorEffect="non-scaling-stroke"
-              />
-            ))}
-          </svg>
-
-          <div className="mt-2 flex justify-between text-[11px] text-slate-400">
-            {points.map((point) => (
-              <span key={point.date}>
-                {new Date(`${point.date}T00:00:00Z`).toLocaleDateString('id-ID', {
-                  day: '2-digit',
-                  month: 'short',
-                })}
+              <span key={item.key} className="flex items-center gap-1.5 text-2xs text-slate-600">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+                <span className="font-medium">{item.label}</span>
+                {!isLoading && points.length > 0 && (
+                  <span className="tnum text-slate-400">{totals[item.key].toLocaleString('id-ID')}</span>
+                )}
               </span>
             ))}
           </div>
-        </>
-      )}
-    </section>
+        }
+      />
+
+      <CardBody>
+        {isLoading && (
+          <div className="space-y-3">
+            <Skeleton className="h-56 w-full" />
+            <Skeleton className="h-3 w-1/2" />
+          </div>
+        )}
+
+        {isError && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+            Gagal memuat tren kehadiran.
+          </div>
+        )}
+
+        {!isLoading && !isError && days > MAX_TREND_DAYS && (
+          <EmptyState
+            icon={TrendingUp}
+            title="Rentang terlalu panjang untuk grafik"
+            description={`Grafik tren dibatasi ${MAX_TREND_DAYS} hari. Perkecil rentang tanggal untuk melihat tren.`}
+          />
+        )}
+
+        {!isLoading && !isError && days <= MAX_TREND_DAYS && points.length === 0 && (
+          <EmptyState
+            icon={TrendingUp}
+            title="Belum ada data rekap"
+            description="Jalankan recompute untuk rentang ini agar grafik terisi."
+          />
+        )}
+
+        {!isLoading && !isError && days <= MAX_TREND_DAYS && points.length > 0 && (
+          <div className="h-56 w-full" role="img" aria-label={`Tren kehadiran ${days} hari`}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+                <defs>
+                  {SERIES.map((item) => (
+                    <linearGradient
+                      key={item.key}
+                      id={`trend-${item.key}`}
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="0%" stopColor={item.color} stopOpacity={0.28} />
+                      <stop offset="100%" stopColor={item.color} stopOpacity={0.02} />
+                    </linearGradient>
+                  ))}
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tickFormatter={formatDay}
+                  tick={{ fontSize: 11, fill: '#94a3b8' }}
+                  tickLine={false}
+                  axisLine={{ stroke: '#e2e8f0' }}
+                  interval="preserveStartEnd"
+                  minTickGap={24}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  width={36}
+                  tick={{ fontSize: 11, fill: '#94a3b8' }}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Tooltip
+                  labelFormatter={(value) =>
+                    new Date(`${String(value)}T00:00:00Z`).toLocaleDateString('id-ID', {
+                      dateStyle: 'medium',
+                    })
+                  }
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: '1px solid #e2e8f0',
+                    fontSize: 12,
+                    boxShadow: '0 12px 32px -16px rgba(15,23,42,0.3)',
+                    padding: '8px 12px',
+                  }}
+                  labelStyle={{ fontWeight: 600, color: '#0f172a', marginBottom: 4 }}
+                />
+                {SERIES.map((item) => (
+                  <Area
+                    key={item.key}
+                    type="monotone"
+                    dataKey={item.key}
+                    name={item.label}
+                    stroke={item.color}
+                    strokeWidth={2}
+                    fill={`url(#trend-${item.key})`}
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 2, stroke: '#ffffff' }}
+                  />
+                ))}
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </CardBody>
+    </Card>
   );
 }

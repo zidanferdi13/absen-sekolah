@@ -2,7 +2,12 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Badge } from '@/components/ui/badge';
+import { DecisionBadge } from '@/components/ui/badge';
+import { Activity, ScrollText } from 'lucide-react';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
+import { TableSkeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
 interface LogRow {
   id: string;
@@ -12,13 +17,6 @@ interface LogRow {
   tapType: string | null;
   decision: string;
 }
-
-const decisionTone: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = {
-  ACCEPTED: 'success',
-  DUPLICATE: 'warning',
-  REJECTED: 'danger',
-  UNKNOWN_CARD: 'neutral',
-};
 
 const tapLabel: Record<string, string> = {
   CLOCK_IN: 'Masuk',
@@ -34,43 +32,91 @@ export function RecentTaps() {
     refetchInterval: 30_000,
   });
 
+  const rows = data?.data ?? [];
+  const accepted = rows.filter((row) => row.decision === 'ACCEPTED').length;
+
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5">
-      <h2 className="text-sm font-semibold">Tap Terakhir</h2>
-      <p className="mt-0.5 text-xs text-slate-500">Diperbarui otomatis tiap 30 detik.</p>
+    <Card className="flex flex-col">
+      <CardHeader
+        icon={Activity}
+        tone="emerald"
+        title="Tap Terakhir"
+        description="Diperbarui otomatis tiap 30 detik."
+        action={
+          !isLoading && rows.length > 0 ? (
+            <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-2xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-100">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              </span>
+              {accepted}/{rows.length} valid
+            </span>
+          ) : undefined
+        }
+      />
 
-      {isLoading && <div className="mt-4 text-sm text-slate-500">Memuat…</div>}
+      <CardBody className="flex-1 pt-4">
+        {isLoading && <TableSkeleton rows={5} cols={2} />}
 
-      {isError && (
-        <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
-          Gagal memuat log.
-        </div>
-      )}
+        {isError && (
+          <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+            Gagal memuat log.
+          </div>
+        )}
 
-      {!isLoading && !isError && (data?.data.length ?? 0) === 0 && (
-        <div className="mt-4 text-xs text-slate-400">Belum ada tap hari ini.</div>
-      )}
+        {!isLoading && !isError && rows.length === 0 && (
+          <EmptyState
+            icon={ScrollText}
+            title="Belum ada tap"
+            description="Tap kartu ke reader untuk melihat aktivitas di sini."
+          />
+        )}
 
-      <ul className="mt-4 divide-y divide-slate-100">
-        {data?.data.map((row) => (
-          <li key={row.id} className="flex items-center justify-between gap-2 py-2.5">
-            <div className="min-w-0">
-              <div className="truncate text-sm font-medium text-slate-800">
-                {row.person?.name ?? '(kartu tidak dikenal)'}
-              </div>
-              <div className="text-[11px] text-slate-500">
-                {new Date(row.tappedAt).toLocaleTimeString('id-ID', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-                {row.person?.className ? ` · ${row.person.className}` : ''}
-                {row.tapType ? ` · ${tapLabel[row.tapType] ?? row.tapType}` : ''}
-              </div>
-            </div>
-            <Badge tone={decisionTone[row.decision] ?? 'neutral'}>{row.decision}</Badge>
-          </li>
-        ))}
-      </ul>
-    </section>
+        <ul className="divide-y divide-slate-100">
+          {rows.map((row) => {
+            const initials = (row.person?.name ?? '?')
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((part) => part[0])
+              .join('')
+              .toUpperCase();
+
+            const acceptedRow = row.decision === 'ACCEPTED';
+
+            return (
+              <li key={row.id} className="flex items-center gap-3 py-2.5 first:pt-0">
+                <span
+                  className={cn(
+                    'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-2xs font-semibold ring-1 ring-inset',
+                    acceptedRow
+                      ? 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+                      : 'bg-slate-100 text-slate-500 ring-slate-200',
+                  )}
+                >
+                  {row.person ? initials : '?'}
+                </span>
+
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium text-slate-800">
+                    {row.person?.name ?? '(kartu tidak dikenal)'}
+                  </div>
+                  <div className="truncate text-2xs text-text-muted">
+                    {new Date(row.tappedAt).toLocaleTimeString('id-ID', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                    {row.person?.className ? ` · ${row.person.className}` : ''}
+                    {row.tapType ? ` · ${tapLabel[row.tapType] ?? row.tapType}` : ''}
+                  </div>
+                </div>
+
+                <DecisionBadge decision={row.decision} />
+              </li>
+            );
+          })}
+        </ul>
+      </CardBody>
+    </Card>
   );
 }
