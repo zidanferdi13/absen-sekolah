@@ -1,14 +1,13 @@
 import { DeviceManager } from '@/components/device-manager';
+import { PageHeader } from '@/components/ui/page-header';
 
 export default function DevicesPage() {
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">Perangkat</h2>
-        <p className="text-sm text-slate-500">
-          Device tap ESP32-S3. API key hanya ditampilkan sekali saat dibuat atau di-rotate.
-        </p>
-      </div>
+      <PageHeader
+        title="Perangkat"
+        description="Device tap ESP32-S3. API key hanya ditampilkan sekali saat dibuat atau di-rotate."
+      />
       <DeviceManager />
     </div>
   );

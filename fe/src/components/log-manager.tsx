@@ -2,12 +2,16 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Download, Search } from 'lucide-react';
+import { Download, ScrollText, Search } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import { Badge } from '@/components/ui/badge';
+import { Badge, DecisionBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field, Input, Select } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Pagination } from '@/components/ui/pagination';
+import { TableSkeleton } from '@/components/ui/skeleton';
+import { TableShell, Td, Th } from '@/components/ui/table';
 import { useCanWrite } from '@/components/auth-guard';
 
 interface LogRow {
@@ -21,13 +25,6 @@ interface LogRow {
   decision: string;
   reason: string | null;
 }
-
-const decisionTone: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = {
-  ACCEPTED: 'success',
-  DUPLICATE: 'warning',
-  REJECTED: 'danger',
-  UNKNOWN_CARD: 'neutral',
-};
 
 const tapLabel: Record<string, string> = {
   CLOCK_IN: 'Masuk',
@@ -95,6 +92,7 @@ export function LogManager() {
   });
 
   const meta = list.data?.meta;
+  const columns = canCorrect ? 8 : 7;
 
   function openCorrect(row: LogRow) {
     setEditing(row);
@@ -189,103 +187,131 @@ export function LogManager() {
         </a>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+      <TableShell>
+        <table className="hidden w-full text-sm sm:table">
+          <thead>
             <tr>
-              <th className="px-4 py-3">Waktu</th>
-              <th className="px-4 py-3">UID</th>
-              <th className="px-4 py-3">Nama</th>
-              <th className="px-4 py-3">Kelas</th>
-              <th className="px-4 py-3">Tipe</th>
-              <th className="px-4 py-3">Keputusan</th>
-              <th className="px-4 py-3">Device</th>
-              {canCorrect && <th className="px-4 py-3 text-right">Aksi</th>}
+              <Th>Waktu</Th>
+              <Th>UID</Th>
+              <Th>Nama</Th>
+              <Th>Kelas</Th>
+              <Th>Tipe</Th>
+              <Th>Keputusan</Th>
+              <Th>Device</Th>
+              {canCorrect && <Th className="text-right">Aksi</Th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {list.isLoading && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
-                  Memuat log…
+                <td colSpan={columns} className="p-0">
+                  <TableSkeleton rows={8} cols={columns} />
                 </td>
               </tr>
             )}
 
             {list.isError && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-sm text-rose-600">
+                <td colSpan={columns} className="px-4 py-8 text-center text-sm text-rose-600">
                   Gagal memuat log.
                 </td>
               </tr>
             )}
 
-            {!list.isLoading && (list.data?.data.length ?? 0) === 0 && (
+            {!list.isLoading && !list.isError && (list.data?.data.length ?? 0) === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
-                  Tidak ada log pada filter ini.
+                <td colSpan={columns} className="p-0">
+                  <EmptyState
+                    icon={ScrollText}
+                    title="Tidak ada log pada filter ini"
+                    description="Coba longgarkan rentang tanggal atau hapus filter keputusan."
+                  />
                 </td>
               </tr>
             )}
 
             {list.data?.data.map((row) => (
               <tr key={row.id} className="hover:bg-slate-50">
-                <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                <Td className="whitespace-nowrap text-slate-600">
                   {new Date(row.tappedAt).toLocaleString('id-ID', {
                     dateStyle: 'short',
                     timeStyle: 'medium',
                   })}
-                </td>
-                <td className="px-4 py-3 font-mono text-xs">{row.uid}</td>
-                <td className="px-4 py-3 font-medium">{row.person?.name ?? '—'}</td>
-                <td className="px-4 py-3 text-slate-600">{row.person?.className ?? '—'}</td>
-                <td className="px-4 py-3 text-slate-600">
+                </Td>
+                <Td className="font-mono text-xs">{row.uid}</Td>
+                <Td className="font-medium">{row.person?.name ?? '—'}</Td>
+                <Td className="text-slate-600">{row.person?.className ?? '—'}</Td>
+                <Td className="text-slate-600">
                   {row.tapType ? (tapLabel[row.tapType] ?? row.tapType) : '—'}
                   {row.prayerSlot ? ` · ${prayerLabel[row.prayerSlot] ?? row.prayerSlot}` : ''}
-                </td>
-                <td className="px-4 py-3">
-                  <Badge tone={decisionTone[row.decision] ?? 'neutral'}>{row.decision}</Badge>
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-500">{row.device.code}</td>
+                </Td>
+                <Td>
+                  <DecisionBadge decision={row.decision} />
+                </Td>
+                <Td className="text-xs text-text-muted">{row.device.code}</Td>
                 {canCorrect && (
-                  <td className="px-4 py-3 text-right">
+                  <Td className="text-right">
                     <Button variant="ghost" size="sm" onClick={() => openCorrect(row)}>
                       Koreksi
                     </Button>
-                  </td>
+                  </Td>
                 )}
               </tr>
             ))}
           </tbody>
         </table>
 
+        <ul className="divide-y divide-slate-100 sm:hidden">
+          {list.isLoading && <TableSkeleton rows={5} cols={2} />}
+
+          {!list.isLoading && (list.data?.data.length ?? 0) === 0 && (
+            <li>
+              <EmptyState
+                icon={ScrollText}
+                title="Tidak ada log"
+                description="Belum ada tap pada filter ini."
+              />
+            </li>
+          )}
+
+          {list.data?.data.map((row) => (
+            <li key={row.id} className="px-4 py-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-900">
+                    {row.person?.name ?? '(kartu tidak dikenal)'}
+                  </p>
+                  <p className="mt-0.5 text-2xs text-text-muted">
+                    {new Date(row.tappedAt).toLocaleString('id-ID', {
+                      dateStyle: 'short',
+                      timeStyle: 'short',
+                    })}
+                    {row.person?.className ? ` · ${row.person.className}` : ''}
+                  </p>
+                  <p className="mt-0.5 font-mono text-2xs text-slate-400">
+                    {row.uid} · {row.device.code}
+                  </p>
+                </div>
+                <DecisionBadge decision={row.decision} />
+              </div>
+              {canCorrect && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-1 -ml-2"
+                  onClick={() => openCorrect(row)}
+                >
+                  Koreksi
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+
         {meta && (
-          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
-            <span>
-              Total {meta.total} · halaman {meta.page}
-              {list.isFetching && ' · memuat…'}
-            </span>
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={page === 1}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
-              >
-                Sebelumnya
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={page * meta.limit >= meta.total}
-                onClick={() => setPage((value) => value + 1)}
-              >
-                Berikutnya
-              </Button>
-            </div>
-          </div>
+          <Pagination page={page} limit={meta.limit} total={meta.total} onPageChange={setPage} />
         )}
-      </div>
+      </TableShell>
 
       <Modal
         open={editing !== null}

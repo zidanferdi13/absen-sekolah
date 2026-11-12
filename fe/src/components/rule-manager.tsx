@@ -8,6 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { TableShell, Td, Th } from '@/components/ui/table';
+import { TableSkeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
 import { useCanWrite } from '@/components/auth-guard';
 import {
   DAY_LABELS,
@@ -65,6 +69,8 @@ export function RuleManager() {
   const [editing, setEditing] = useState<RuleRow | null>(null);
   const [form, setForm] = useState<RuleFormState>(emptyRuleForm);
   const [formError, setFormError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<RuleRow | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUid, setPreviewUid] = useState('');
@@ -113,7 +119,14 @@ export function RuleManager() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/rules/${id}`),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      setDeleting(null);
+      setDeleteError(null);
+    },
+    onError: (err) => {
+      setDeleteError(err instanceof ApiError ? err.message : 'Gagal menghapus aturan');
+    },
   });
 
   const previewMutation = useMutation({
@@ -180,7 +193,11 @@ export function RuleManager() {
         )}
       </div>
 
-      {list.isLoading && <div className="text-sm text-slate-500">Memuat aturan…</div>}
+      {list.isLoading && (
+        <TableShell>
+          <TableSkeleton rows={4} cols={6} />
+        </TableShell>
+      )}
 
       {list.isError && (
         <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
@@ -188,43 +205,59 @@ export function RuleManager() {
         </div>
       )}
 
-      {list.data && (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      {list.data && (list.data.data.length === 0 ? (
+        <TableShell>
+          <EmptyState
+            icon={FlaskConical}
+            title="Belum ada aturan"
+            description="Semua tap akan ditolak sampai minimal satu aturan dibuat."
+            action={
+              canWrite ? (
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setEditing(null);
+                    setForm(emptyRuleForm);
+                    setFormError(null);
+                    setOpen(true);
+                  }}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Tambah Aturan
+                </Button>
+              ) : undefined
+            }
+          />
+        </TableShell>
+      ) : (
+        <TableShell>
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+            <thead>
               <tr>
-                <th className="px-4 py-3">Nama</th>
-                <th className="px-4 py-3">Tipe</th>
-                <th className="px-4 py-3">Hari</th>
-                <th className="px-4 py-3">Jam</th>
-                <th className="px-4 py-3">Scope</th>
-                <th className="px-4 py-3">Pri.</th>
-                <th className="px-4 py-3">Status</th>
-                {canWrite && <th className="px-4 py-3 text-right">Aksi</th>}
+                <Th>Nama</Th>
+                <Th>Tipe</Th>
+                <Th>Hari</Th>
+                <Th>Jam</Th>
+                <Th>Scope</Th>
+                <Th>Pri.</Th>
+                <Th>Status</Th>
+                {canWrite && <Th className="text-right">Aksi</Th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {list.data.data.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-500">
-                    Belum ada aturan. Semua tap akan ditolak sampai aturan dibuat.
-                  </td>
-                </tr>
-              )}
-
               {list.data.data.map((row) => (
                 <tr key={row.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-medium">{row.name}</td>
-                  <td className="px-4 py-3 text-slate-600">
+                  <Td className="font-medium">{row.name}</Td>
+                  <Td className="text-slate-600">
                     {typeLabel[row.type] ?? row.type}
                     {row.prayerSlot ? ` · ${slotLabel[row.prayerSlot] ?? row.prayerSlot}` : ''}
-                  </td>
-                  <td className="px-4 py-3">
+                  </Td>
+                  <Td>
                     <div className="flex gap-0.5">
                       {DAY_LABELS.map((label, index) => (
                         <span
                           key={label}
-                          className={`inline-flex h-5 w-6 items-center justify-center rounded text-[10px] ${
+                          className={`inline-flex h-5 w-6 items-center justify-center rounded text-2xs ${
                             row.daysOfWeek.includes(index)
                               ? 'bg-brand-500 text-white'
                               : 'bg-slate-100 text-slate-400'
@@ -234,46 +267,70 @@ export function RuleManager() {
                         </span>
                       ))}
                     </div>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-600">
+                  </Td>
+                  <Td className="whitespace-nowrap font-mono text-xs text-slate-600">
                     {toTime(row.startMinute)}–{toTime(row.endMinute)}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">
+                  </Td>
+                  <Td className="text-slate-600">
                     {row.scope === 'GLOBAL' ? 'Global' : (row.className ?? 'Kelas')}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">{row.priority}</td>
-                  <td className="px-4 py-3">
+                  </Td>
+                  <Td className="text-slate-600">{row.priority}</Td>
+                  <Td>
                     <Badge tone={row.isActive ? 'success' : 'neutral'}>
                       {row.isActive ? 'Aktif' : 'Nonaktif'}
                     </Badge>
-                  </td>
+                  </Td>
                   {canWrite && (
-                    <td className="px-4 py-3">
+                    <Td>
                       <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(row)} aria-label="Ubah">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEdit(row)}
+                          aria-label={`Ubah aturan ${row.name}`}
+                        >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                           variant="ghost"
-                          size="sm"
-                          aria-label="Hapus"
+                          size="icon"
+                          aria-label={`Hapus aturan ${row.name}`}
                           onClick={() => {
-                            if (window.confirm(`Hapus aturan "${row.name}"?`)) {
-                              deleteMutation.mutate(row.id);
-                            }
+                            setDeleteError(null);
+                            setDeleting(row);
                           }}
                         >
                           <Trash2 className="h-3.5 w-3.5 text-rose-600" />
                         </Button>
                       </div>
-                    </td>
+                    </Td>
                   )}
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+        </TableShell>
+      ))}
+
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Hapus aturan?"
+        description={
+          deleting
+            ? `Aturan "${deleting.name}" akan dihapus. Tap yang sebelumnya cocok dengan aturan ini bisa berubah hasilnya setelah recompute.`
+            : ''
+        }
+        confirmLabel="Hapus Aturan"
+        pending={deleteMutation.isPending}
+        error={deleteError}
+        onConfirm={() => {
+          if (deleting) deleteMutation.mutate(deleting.id);
+        }}
+        onClose={() => {
+          setDeleting(null);
+          setDeleteError(null);
+        }}
+      />
 
       <RuleFormModal
         open={open}

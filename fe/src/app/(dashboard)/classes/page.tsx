@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { ClassManager } from '@/components/class-manager';
+import { PageHeader } from '@/components/ui/page-header';
 
 interface AcademicYear {
   id: string;
@@ -24,12 +25,10 @@ export default function ClassesPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">Kelas</h2>
-        <p className="text-sm text-slate-500">
-          Daftar kelas pada tahun ajaran. Kelas yang masih punya siswa aktif tidak bisa dihapus.
-        </p>
-      </div>
+      <PageHeader
+        title="Kelas"
+        description="Daftar kelas pada tahun ajaran. Kelas yang masih punya siswa aktif tidak bisa dihapus."
+      />
 
       {years.isLoading && <div className="text-sm text-slate-500">Memuat tahun ajaran…</div>}
 

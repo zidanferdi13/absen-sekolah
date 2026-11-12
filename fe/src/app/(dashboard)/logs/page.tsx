@@ -1,14 +1,13 @@
 import { LogManager } from '@/components/log-manager';
+import { PageHeader } from '@/components/ui/page-header';
 
 export default function LogsPage() {
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">Log Tap</h2>
-        <p className="text-sm text-slate-500">
-          Seluruh event tap, termasuk kartu tidak dikenal. Export mengikuti filter aktif.
-        </p>
-      </div>
+      <PageHeader
+        title="Log Tap"
+        description="Seluruh event tap, termasuk kartu tidak dikenal. Export mengikuti filter aktif."
+      />
       <LogManager />
     </div>
   );

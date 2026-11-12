@@ -2,12 +2,17 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Search, Trash2, Users } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field, Input, Select } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Pagination } from '@/components/ui/pagination';
+import { TableSkeleton } from '@/components/ui/skeleton';
+import { TableShell, Td, Th } from '@/components/ui/table';
 import { useCanWrite } from '@/components/auth-guard';
 
 export interface PersonRow {
@@ -76,6 +81,8 @@ export function PersonManager({
   const [editing, setEditing] = useState<PersonRow | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<PersonRow | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const query = new URLSearchParams({ page: String(page), limit: '20' });
   if (search.trim()) query.set('q', search.trim());
@@ -133,7 +140,14 @@ export function PersonManager({
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`${endpoint}/${id}`),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      setDeleting(null);
+      setDeleteError(null);
+    },
+    onError: (err) => {
+      setDeleteError(err instanceof ApiError ? err.message : 'Gagal menghapus data');
+    },
   });
 
   function openCreate() {
@@ -165,6 +179,7 @@ export function PersonManager({
 
   const identifierLabel = type === 'STUDENT' ? 'NIS' : 'NIP';
   const title = type === 'STUDENT' ? 'Data Siswa' : 'Data Guru';
+  const columns = type === 'STUDENT' ? 6 : 5;
 
   const classOptions = useMemo(() => classes.data?.data ?? [], [classes.data]);
 
@@ -224,39 +239,51 @@ export function PersonManager({
         )}
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+      <TableShell>
+        <table className="hidden w-full text-sm sm:table">
+          <thead>
             <tr>
-              <th className="px-4 py-3">{identifierLabel}</th>
-              <th className="px-4 py-3">Nama</th>
-              {type === 'STUDENT' && <th className="px-4 py-3">Kelas</th>}
-              <th className="px-4 py-3">Kartu RFID</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Aksi</th>
+              <Th>{identifierLabel}</Th>
+              <Th>Nama</Th>
+              {type === 'STUDENT' && <Th>Kelas</Th>}
+              <Th>Kartu RFID</Th>
+              <Th>Status</Th>
+              <Th className="text-right">Aksi</Th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {list.isLoading && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
-                  Memuat data…
+                <td colSpan={columns} className="p-0">
+                  <TableSkeleton rows={6} cols={columns} />
                 </td>
               </tr>
             )}
 
             {list.isError && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-rose-600">
+                <td colSpan={columns} className="px-4 py-8 text-center text-sm text-rose-600">
                   Gagal memuat data. {list.error instanceof ApiError ? list.error.message : ''}
                 </td>
               </tr>
             )}
 
-            {!list.isLoading && rows.length === 0 && (
+            {!list.isLoading && !list.isError && rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
-                  Belum ada data.
+                <td colSpan={columns} className="p-0">
+                  <EmptyState
+                    icon={Users}
+                    title={`Belum ada ${type === 'STUDENT' ? 'siswa' : 'guru'}`}
+                    description="Data yang ditambahkan akan muncul di sini dan bisa langsung dipasangkan kartu RFID."
+                    action={
+                      canWrite ? (
+                        <Button size="sm" onClick={openCreate}>
+                          <Plus className="h-3.5 w-3.5" />
+                          Tambah {type === 'STUDENT' ? 'Siswa' : 'Guru'}
+                        </Button>
+                      ) : undefined
+                    }
+                  />
                 </td>
               </tr>
             )}
@@ -265,81 +292,142 @@ export function PersonManager({
               const activeCard = row.cards.find((card) => card.status === 'ACTIVE');
               return (
                 <tr key={row.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-mono text-xs text-slate-600">
-                    {row.nis ?? row.nip ?? '—'}
-                  </td>
-                  <td className="px-4 py-3 font-medium">{row.fullName}</td>
-                  {type === 'STUDENT' && (
-                    <td className="px-4 py-3 text-slate-600">{row.className ?? '—'}</td>
-                  )}
-                  <td className="px-4 py-3">
+                  <Td className="font-mono text-xs text-slate-600">{row.nis ?? row.nip ?? '—'}</Td>
+                  <Td className="font-medium">{row.fullName}</Td>
+                  {type === 'STUDENT' && <Td className="text-slate-600">{row.className ?? '—'}</Td>}
+                  <Td>
                     {activeCard ? (
                       <Badge tone="info">{activeCard.uid}</Badge>
                     ) : (
                       <span className="text-xs text-slate-400">Belum ada</span>
                     )}
-                  </td>
-                  <td className="px-4 py-3">
+                  </Td>
+                  <Td>
                     <Badge tone={row.isActive ? 'success' : 'neutral'}>
                       {row.isActive ? 'Aktif' : 'Nonaktif'}
                     </Badge>
-                  </td>
-                  <td className="px-4 py-3">
+                  </Td>
+                  <Td>
                     <div className="flex justify-end gap-1">
                       {canWrite && (
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(row)} aria-label="Ubah">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEdit(row)}
+                          aria-label={`Ubah ${row.fullName}`}
+                        >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                       )}
                       {canDelete && (
                         <Button
                           variant="ghost"
-                          size="sm"
-                          aria-label="Hapus"
+                          size="icon"
+                          aria-label={`Hapus ${row.fullName}`}
                           onClick={() => {
-                            if (window.confirm(`Hapus ${row.fullName}? Riwayat tap tetap tersimpan.`)) {
-                              deleteMutation.mutate(row.id);
-                            }
+                            setDeleteError(null);
+                            setDeleting(row);
                           }}
                         >
                           <Trash2 className="h-3.5 w-3.5 text-rose-600" />
                         </Button>
                       )}
                     </div>
-                  </td>
+                  </Td>
                 </tr>
               );
             })}
           </tbody>
         </table>
 
+        <ul className="divide-y divide-slate-100 sm:hidden">
+          {list.isLoading && <TableSkeleton rows={4} cols={2} />}
+
+          {!list.isLoading && rows.length === 0 && (
+            <li>
+              <EmptyState
+                icon={Users}
+                title={`Belum ada ${type === 'STUDENT' ? 'siswa' : 'guru'}`}
+                description="Tambahkan data untuk mulai memakai absensi RFID."
+              />
+            </li>
+          )}
+
+          {rows.map((row) => {
+            const activeCard = row.cards.find((card) => card.status === 'ACTIVE');
+            return (
+              <li key={row.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-900">{row.fullName}</p>
+                  <p className="mt-0.5 font-mono text-2xs text-text-muted">
+                    {row.nis ?? row.nip ?? '—'}
+                    {type === 'STUDENT' && row.className ? ` · ${row.className}` : ''}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <Badge tone={row.isActive ? 'success' : 'neutral'}>
+                      {row.isActive ? 'Aktif' : 'Nonaktif'}
+                    </Badge>
+                    {activeCard ? (
+                      <Badge tone="info">{activeCard.uid}</Badge>
+                    ) : (
+                      <span className="text-2xs text-slate-400">Tanpa kartu</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  {canWrite && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => openEdit(row)}
+                      aria-label={`Ubah ${row.fullName}`}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  {canDelete && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Hapus ${row.fullName}`}
+                      onClick={() => {
+                        setDeleteError(null);
+                        setDeleting(row);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                    </Button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+
         {meta && (
-          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
-            <span>
-              Total {meta.total} data
-              {list.isFetching && ' · memuat…'}
-            </span>
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
-                disabled={page === 1}
-              >
-                Sebelumnya
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setPage((value) => value + 1)}
-                disabled={page * meta.limit >= meta.total}
-              >
-                Berikutnya
-              </Button>
-            </div>
-          </div>
+          <Pagination page={page} limit={meta.limit} total={meta.total} onPageChange={setPage} />
         )}
-      </div>
+      </TableShell>
+
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Hapus data?"
+        description={
+          deleting
+            ? `${deleting.fullName} akan dihapus (soft delete). Riwayat tap tetap tersimpan.`
+            : ''
+        }
+        confirmLabel="Hapus"
+        pending={deleteMutation.isPending}
+        error={deleteError}
+        onConfirm={() => {
+          if (deleting) deleteMutation.mutate(deleting.id);
+        }}
+        onClose={() => {
+          setDeleting(null);
+          setDeleteError(null);
+        }}
+      />
 
       <Modal
         open={open}

@@ -1,14 +1,13 @@
 import { SettingsForm } from '@/components/settings-form';
+import { PageHeader } from '@/components/ui/page-header';
 
 export default function SettingsPage() {
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">Pengaturan</h2>
-        <p className="text-sm text-slate-500">
-          Jam masuk sekolah, toleransi keterlambatan, dan nama sekolah yang tampil di device.
-        </p>
-      </div>
+      <PageHeader
+        title="Pengaturan"
+        description="Jam masuk sekolah, toleransi keterlambatan, dan nama sekolah yang tampil di device."
+      />
       <SettingsForm />
     </div>
   );

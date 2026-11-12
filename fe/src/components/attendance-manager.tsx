@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { Badge, StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field, Input, Select } from '@/components/ui/field';
+import { SegmentedControl } from '@/components/ui/tabs';
 
 interface DailyRow {
   personId: string;
@@ -48,12 +49,12 @@ const SUMMARY_ITEMS = [
 ] as const;
 
 const statusCell: Record<string, string> = {
-  HADIR: 'bg-emerald-100 text-emerald-700',
-  TERLAMBAT: 'bg-amber-100 text-amber-700',
-  ALFA: 'bg-rose-100 text-rose-700',
-  IZIN: 'bg-sky-100 text-sky-700',
-  SAKIT: 'bg-indigo-100 text-indigo-700',
-  LIBUR: 'bg-slate-100 text-slate-500',
+  HADIR: 'bg-status-hadir/10 text-status-hadir',
+  TERLAMBAT: 'bg-status-terlambat/10 text-status-terlambat',
+  ALFA: 'bg-status-alfa/10 text-status-alfa',
+  IZIN: 'bg-status-izin/10 text-status-izin',
+  SAKIT: 'bg-status-sakit/10 text-status-sakit',
+  LIBUR: 'bg-status-libur/10 text-status-libur',
 };
 
 const statusShort: Record<string, string> = {
@@ -109,26 +110,21 @@ export function AttendanceManager() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4">
+      <div
+        data-print-hide
+        className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4"
+      >
         <div className="inline-flex rounded-md border border-slate-300 p-0.5">
-          <button
-            type="button"
-            onClick={() => setTab('daily')}
-            className={`rounded px-3 py-1.5 text-xs font-medium transition ${
-              tab === 'daily' ? 'bg-brand-500 text-white' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            Harian
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('monthly')}
-            className={`rounded px-3 py-1.5 text-xs font-medium transition ${
-              tab === 'monthly' ? 'bg-brand-500 text-white' : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            Bulanan
-          </button>
+          <SegmentedControl
+            ariaLabel="Jenis rekap"
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: 'daily', label: 'Harian' },
+              { value: 'monthly', label: 'Bulanan' },
+            ]}
+            className="border-0"
+          />
         </div>
 
         {tab === 'daily' ? (
@@ -197,7 +193,7 @@ export function AttendanceManager() {
                 ))}
               </div>
 
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
                     <tr>
@@ -284,7 +280,7 @@ export function AttendanceManager() {
           )}
 
           {monthly.data && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white print-color-exact">
               <table className="w-full text-xs">
                 <thead className="bg-slate-50 text-slate-500">
                   <tr>
@@ -320,7 +316,7 @@ export function AttendanceManager() {
                             {status ? (
                               <span
                                 title={status}
-                                className={`inline-flex h-5 w-5 items-center justify-center rounded text-[10px] font-semibold ${
+                                className={`inline-flex h-5 w-5 items-center justify-center rounded text-2xs font-semibold ${
                                   statusCell[status] ?? 'bg-slate-100 text-slate-500'
                                 }`}
                               >
@@ -343,7 +339,7 @@ export function AttendanceManager() {
             {Object.entries(statusShort).map(([status, letter]) => (
               <span key={status} className="flex items-center gap-1.5">
                 <span
-                  className={`inline-flex h-5 w-5 items-center justify-center rounded text-[10px] font-semibold ${
+                  className={`inline-flex h-5 w-5 items-center justify-center rounded text-2xs font-semibold ${
                     statusCell[status] ?? 'bg-slate-100 text-slate-500'
                   }`}
                 >

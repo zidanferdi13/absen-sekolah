@@ -2,12 +2,17 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ban, Plus, Search } from 'lucide-react';
+import { Ban, CreditCard, Plus, Search } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field, Input, Select } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Pagination } from '@/components/ui/pagination';
+import { TableSkeleton } from '@/components/ui/skeleton';
+import { TableShell, Td, Th } from '@/components/ui/table';
 import { useCanWrite } from '@/components/auth-guard';
 
 interface CardRow {
@@ -53,6 +58,7 @@ export function CardManager() {
   const [label, setLabel] = useState('');
   const [personId, setPersonId] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<CardRow | null>(null);
 
   const query = new URLSearchParams({ page: String(page), limit: '25' });
   if (search.trim()) query.set('q', search.trim());
@@ -108,7 +114,10 @@ export function CardManager() {
   const revokeMutation = useMutation({
     mutationFn: (p: { id: string; status: 'INACTIVE' | 'LOST' }) =>
       api.post(`/cards/${p.id}/revoke`, { status: p.status }),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      setRevoking(null);
+    },
   });
 
   const meta = list.data?.meta;
@@ -164,23 +173,23 @@ export function CardManager() {
         )}
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+      <TableShell>
+        <table className="hidden w-full text-sm sm:table">
+          <thead>
             <tr>
-              <th className="px-4 py-3">UID</th>
-              <th className="px-4 py-3">Label</th>
-              <th className="px-4 py-3">Pemilik</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Assign</th>
-              <th className="px-4 py-3 text-right">Aksi</th>
+              <Th>UID</Th>
+              <Th>Label</Th>
+              <Th>Pemilik</Th>
+              <Th>Status</Th>
+              <Th>Assign</Th>
+              <Th className="text-right">Aksi</Th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {list.isLoading && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
-                  Memuat kartu…
+                <td colSpan={6} className="p-0">
+                  <TableSkeleton rows={6} cols={6} />
                 </td>
               </tr>
             )}
@@ -193,23 +202,35 @@ export function CardManager() {
               </tr>
             )}
 
-            {!list.isLoading && (list.data?.data.length ?? 0) === 0 && (
+            {!list.isLoading && !list.isError && (list.data?.data.length ?? 0) === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-500">
-                  Belum ada kartu terdaftar.
+                <td colSpan={6} className="p-0">
+                  <EmptyState
+                    icon={CreditCard}
+                    title="Belum ada kartu terdaftar"
+                    description="Terbitkan kartu baru, lalu tempelkan ke reader untuk mendapatkan UID-nya."
+                    action={
+                      canWrite ? (
+                        <Button size="sm" onClick={() => setOpen(true)}>
+                          <Plus className="h-3.5 w-3.5" />
+                          Terbitkan Kartu
+                        </Button>
+                      ) : undefined
+                    }
+                  />
                 </td>
               </tr>
             )}
 
             {list.data?.data.map((row) => (
               <tr key={row.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 font-mono text-xs font-medium">{row.uid}</td>
-                <td className="px-4 py-3 text-slate-600">{row.label ?? '—'}</td>
-                <td className="px-4 py-3">
+                <Td className="font-mono text-xs font-medium">{row.uid}</Td>
+                <Td className="text-slate-600">{row.label ?? '—'}</Td>
+                <Td>
                   {row.person ? (
                     <div>
                       <div className="font-medium">{row.person.fullName}</div>
-                      <div className="text-xs text-slate-500">
+                      <div className="text-xs text-text-muted">
                         {row.person.type === 'STUDENT' ? 'Siswa' : 'Guru'} ·{' '}
                         {row.person.nis ?? row.person.nip ?? '—'}
                       </div>
@@ -217,62 +238,93 @@ export function CardManager() {
                   ) : (
                     <span className="text-xs text-slate-400">Belum ter-assign</span>
                   )}
-                </td>
-                <td className="px-4 py-3">
+                </Td>
+                <Td>
                   <Badge tone={statusTone[row.status] ?? 'neutral'}>
                     {statusLabel[row.status] ?? row.status}
                   </Badge>
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-500">
+                </Td>
+                <Td className="text-xs text-text-muted">
                   {row.assignedAt ? new Date(row.assignedAt).toLocaleDateString('id-ID') : '—'}
-                </td>
-                <td className="px-4 py-3">
+                </Td>
+                <Td>
                   <div className="flex justify-end">
                     {canWrite && row.status === 'ACTIVE' && (
                       <Button
                         variant="ghost"
-                        size="sm"
-                        aria-label="Revoke kartu"
-                        onClick={() => {
-                          if (window.confirm(`Nonaktifkan kartu ${row.uid}?`)) {
-                            revokeMutation.mutate({ id: row.id, status: 'INACTIVE' });
-                          }
-                        }}
+                        size="icon"
+                        aria-label={`Nonaktifkan kartu ${row.uid}`}
+                        onClick={() => setRevoking(row)}
                       >
                         <Ban className="h-3.5 w-3.5 text-rose-600" />
                       </Button>
                     )}
                   </div>
-                </td>
+                </Td>
               </tr>
             ))}
           </tbody>
         </table>
 
+        <ul className="divide-y divide-slate-100 sm:hidden">
+          {list.isLoading && <TableSkeleton rows={4} cols={2} />}
+
+          {!list.isLoading && (list.data?.data.length ?? 0) === 0 && (
+            <li>
+              <EmptyState
+                icon={CreditCard}
+                title="Belum ada kartu"
+                description="Terbitkan kartu untuk mulai memakai absensi RFID."
+              />
+            </li>
+          )}
+
+          {list.data?.data.map((row) => (
+            <li key={row.id} className="flex items-start justify-between gap-3 px-4 py-3">
+              <div className="min-w-0">
+                <p className="font-mono text-sm font-medium text-slate-900">{row.uid}</p>
+                <p className="mt-0.5 truncate text-2xs text-text-muted">
+                  {row.person ? row.person.fullName : 'Belum ter-assign'}
+                  {row.label ? ` · ${row.label}` : ''}
+                </p>
+                <div className="mt-1.5">
+                  <Badge tone={statusTone[row.status] ?? 'neutral'}>
+                    {statusLabel[row.status] ?? row.status}
+                  </Badge>
+                </div>
+              </div>
+              {canWrite && row.status === 'ACTIVE' && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Nonaktifkan kartu ${row.uid}`}
+                  onClick={() => setRevoking(row)}
+                >
+                  <Ban className="h-3.5 w-3.5 text-rose-600" />
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+
         {meta && (
-          <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
-            <span>Total {meta.total} kartu</span>
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={page === 1}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
-              >
-                Sebelumnya
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={page * meta.limit >= meta.total}
-                onClick={() => setPage((value) => value + 1)}
-              >
-                Berikutnya
-              </Button>
-            </div>
-          </div>
+          <Pagination page={page} limit={meta.limit} total={meta.total} onPageChange={setPage} />
         )}
-      </div>
+      </TableShell>
+
+      <ConfirmDialog
+        open={revoking !== null}
+        title="Nonaktifkan kartu?"
+        description={
+          revoking ? `Kartu ${revoking.uid} tidak akan bisa dipakai tap sampai diaktifkan lagi.` : ''
+        }
+        confirmLabel="Nonaktifkan"
+        pending={revokeMutation.isPending}
+        onConfirm={() => {
+          if (revoking) revokeMutation.mutate({ id: revoking.id, status: 'INACTIVE' });
+        }}
+        onClose={() => setRevoking(null)}
+      />
 
       <Modal
         open={open}

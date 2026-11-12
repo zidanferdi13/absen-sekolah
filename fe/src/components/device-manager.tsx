@@ -8,6 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field, Input, Select } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { EmptyState } from '@/components/ui/empty-state';
+import { TableSkeleton } from '@/components/ui/skeleton';
+import { TableShell, Td, Th } from '@/components/ui/table';
 import { useCanWrite } from '@/components/auth-guard';
 
 interface DeviceRow {
@@ -56,6 +60,7 @@ export function DeviceManager() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const [revealed, setRevealed] = useState<{ code: string; apiKey: string } | null>(null);
+  const [rotating, setRotating] = useState<DeviceRow | null>(null);
 
   const list = useQuery({
     queryKey: ['devices'],
@@ -118,48 +123,60 @@ export function DeviceManager() {
 
       {list.isLoading && <div className="text-sm text-slate-500">Memuat device…</div>}
 
+      {list.isLoading && (
+        <TableShell>
+          <TableSkeleton rows={4} cols={5} />
+        </TableShell>
+      )}
+
       {list.isError && (
         <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
           Gagal memuat device.
         </div>
       )}
 
-      {list.data && (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      {list.data && (list.data.data.length === 0 ? (
+        <TableShell>
+          <EmptyState
+            icon={KeyRound}
+            title="Belum ada device terdaftar"
+            description="Tambahkan device ESP32-S3 lalu salin API key-nya ke firmware."
+            action={
+              <Button size="sm" onClick={() => setOpen(true)}>
+                <Plus className="h-3.5 w-3.5" />
+                Tambah Device
+              </Button>
+            }
+          />
+        </TableShell>
+      ) : (
+        <TableShell>
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+            <thead>
               <tr>
-                <th className="px-4 py-3">Kode</th>
-                <th className="px-4 py-3">Nama</th>
-                <th className="px-4 py-3">Lokasi</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Firmware</th>
-                <th className="px-4 py-3">Terakhir aktif</th>
-                <th className="px-4 py-3 text-right">Aksi</th>
+                <Th>Kode</Th>
+                <Th>Nama</Th>
+                <Th>Lokasi</Th>
+                <Th>Status</Th>
+                <Th>Firmware</Th>
+                <Th>Terakhir aktif</Th>
+                <Th className="text-right">Aksi</Th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {list.data.data.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">
-                    Belum ada device terdaftar.
-                  </td>
-                </tr>
-              )}
-
               {list.data.data.map((row) => (
                 <tr key={row.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-mono text-xs font-medium">{row.code}</td>
-                  <td className="px-4 py-3 font-medium">{row.name}</td>
-                  <td className="px-4 py-3 text-slate-600">{row.location ?? '—'}</td>
-                  <td className="px-4 py-3">
+                  <Td className="font-mono text-xs font-medium">{row.code}</Td>
+                  <Td className="font-medium">{row.name}</Td>
+                  <Td className="text-slate-600">{row.location ?? '—'}</Td>
+                  <Td>
                     <Badge tone={statusTone[row.status] ?? 'neutral'}>
                       {statusLabel[row.status] ?? row.status}
                     </Badge>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{row.firmwareVersion ?? '—'}</td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{relativeTime(row.lastSeenAt)}</td>
-                  <td className="px-4 py-3">
+                  </Td>
+                  <Td className="text-xs text-text-muted">{row.firmwareVersion ?? '—'}</Td>
+                  <Td className="text-xs text-text-muted">{relativeTime(row.lastSeenAt)}</Td>
+                  <Td>
                     <div className="flex items-center justify-end gap-1">
                       <Select
                         value={row.status}
@@ -177,28 +194,36 @@ export function DeviceManager() {
                       </Select>
                       <Button
                         variant="ghost"
-                        size="sm"
-                        title="Rotate API key"
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              `Rotate API key untuk ${row.code}? Device lama tidak akan bisa mengirim tap sampai key baru dipasang.`,
-                            )
-                          ) {
-                            rotateMutation.mutate(row.id);
-                          }
-                        }}
+                        size="icon"
+                        aria-label={`Rotate API key ${row.code}`}
+                        onClick={() => setRotating(row)}
                       >
                         <KeyRound className="h-3.5 w-3.5" />
                       </Button>
                     </div>
-                  </td>
+                  </Td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+        </TableShell>
+      ))}
+
+      <ConfirmDialog
+        open={rotating !== null}
+        title="Rotate API key?"
+        description={
+          rotating
+            ? `Device ${rotating.code} tidak akan bisa mengirim tap sampai API key baru dipasang di firmware.`
+            : ''
+        }
+        confirmLabel="Rotate Key"
+        pending={rotateMutation.isPending}
+        onConfirm={() => {
+          if (rotating) rotateMutation.mutate(rotating.id);
+        }}
+        onClose={() => setRotating(null)}
+      />
 
       <Modal
         open={open}

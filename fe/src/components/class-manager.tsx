@@ -2,11 +2,15 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Plus, School, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Field, Input, Select } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { EmptyState } from '@/components/ui/empty-state';
+import { TableShell, Td, Th } from '@/components/ui/table';
+import { TableSkeleton } from '@/components/ui/skeleton';
 import { useCanWrite } from '@/components/auth-guard';
 
 interface ClassRow {
@@ -39,6 +43,8 @@ export function ClassManager({ academicYears }: { academicYears: AcademicYear[] 
   const [editing, setEditing] = useState<ClassRow | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<ClassRow | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const list = useQuery({
     queryKey: ['classes'],
@@ -66,9 +72,13 @@ export function ClassManager({ academicYears }: { academicYears: AcademicYear[] 
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/classes/${id}`),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      setDeleting(null);
+      setDeleteError(null);
+    },
     onError: (err) => {
-      window.alert(err instanceof ApiError ? err.message : 'Gagal menghapus kelas');
+      setDeleteError(err instanceof ApiError ? err.message : 'Gagal menghapus kelas');
     },
   });
 
@@ -97,22 +107,22 @@ export function ClassManager({ academicYears }: { academicYears: AcademicYear[] 
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <TableShell>
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+          <thead>
             <tr>
-              <th className="px-4 py-3">Kelas</th>
-              <th className="px-4 py-3">Tingkat</th>
-              <th className="px-4 py-3">Tahun Ajaran</th>
-              <th className="px-4 py-3">Jumlah Siswa</th>
-              <th className="px-4 py-3 text-right">Aksi</th>
+              <Th>Kelas</Th>
+              <Th>Tingkat</Th>
+              <Th>Tahun Ajaran</Th>
+              <Th>Jumlah Siswa</Th>
+              <Th className="text-right">Aksi</Th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {list.isLoading && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">
-                  Memuat data…
+                <td colSpan={5} className="p-0">
+                  <TableSkeleton rows={4} cols={5} />
                 </td>
               </tr>
             )}
@@ -125,35 +135,51 @@ export function ClassManager({ academicYears }: { academicYears: AcademicYear[] 
               </tr>
             )}
 
-            {!list.isLoading && (list.data?.data.length ?? 0) === 0 && (
+            {!list.isLoading && !list.isError && (list.data?.data.length ?? 0) === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">
-                  Belum ada kelas.
+                <td colSpan={5} className="p-0">
+                  <EmptyState
+                    icon={School}
+                    title="Belum ada kelas"
+                    description="Tambahkan kelas pada tahun ajaran aktif untuk mulai mengelompokkan siswa."
+                    action={
+                      canWrite ? (
+                        <Button size="sm" onClick={openCreate}>
+                          <Plus className="h-3.5 w-3.5" />
+                          Tambah Kelas
+                        </Button>
+                      ) : undefined
+                    }
+                  />
                 </td>
               </tr>
             )}
 
             {list.data?.data.map((row) => (
               <tr key={row.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 font-medium">{row.name}</td>
-                <td className="px-4 py-3 text-slate-600">{row.level}</td>
-                <td className="px-4 py-3 text-slate-600">{row.academicYearName}</td>
-                <td className="px-4 py-3 text-slate-600">{row.studentCount}</td>
-                <td className="px-4 py-3">
+                <Td className="font-medium">{row.name}</Td>
+                <Td className="text-slate-600">{row.level}</Td>
+                <Td className="text-slate-600">{row.academicYearName}</Td>
+                <Td className="text-slate-600">{row.studentCount}</Td>
+                <Td>
                   <div className="flex justify-end gap-1">
                     {canWrite && (
                       <>
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(row)} aria-label="Ubah">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEdit(row)}
+                          aria-label={`Ubah kelas ${row.name}`}
+                        >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                           variant="ghost"
-                          size="sm"
-                          aria-label="Hapus"
+                          size="icon"
+                          aria-label={`Hapus kelas ${row.name}`}
                           onClick={() => {
-                            if (window.confirm(`Hapus kelas ${row.name}?`)) {
-                              deleteMutation.mutate(row.id);
-                            }
+                            setDeleteError(null);
+                            setDeleting(row);
                           }}
                         >
                           <Trash2 className="h-3.5 w-3.5 text-rose-600" />
@@ -161,12 +187,32 @@ export function ClassManager({ academicYears }: { academicYears: AcademicYear[] 
                       </>
                     )}
                   </div>
-                </td>
+                </Td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
+      </TableShell>
+
+      <ConfirmDialog
+        open={deleting !== null}
+        title="Hapus kelas?"
+        description={
+          deleting
+            ? `Kelas ${deleting.name} akan dihapus. Kelas yang masih punya siswa aktif tidak bisa dihapus.`
+            : ''
+        }
+        confirmLabel="Hapus Kelas"
+        pending={deleteMutation.isPending}
+        error={deleteError}
+        onConfirm={() => {
+          if (deleting) deleteMutation.mutate(deleting.id);
+        }}
+        onClose={() => {
+          setDeleting(null);
+          setDeleteError(null);
+        }}
+      />
 
       <Modal
         open={open}
