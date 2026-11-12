@@ -31,7 +31,10 @@ export default async function deviceRoutes(app: FastifyInstance) {
             rateLimit: {
               max: env.DEVICE_RATE_LIMIT_PER_MINUTE,
               timeWindow: '1 minute',
-              keyGenerator: (request) => request.device.code,
+              // deviceAuth berjalan di preHandler; rate limit harus setelahnya agar
+              // `request.device` sudah terisi saat keyGenerator dipanggil.
+              hook: 'preHandler',
+              keyGenerator: (request) => request.device?.code ?? request.ip,
             },
           },
         },
