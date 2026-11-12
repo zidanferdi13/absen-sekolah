@@ -76,7 +76,7 @@ export function LogoUploader({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={value} alt="Logo sekolah" className="h-full w-full object-contain" />
           ) : (
-            <span className="text-[10px] text-slate-400">Belum ada</span>
+            <span className="text-2xs text-slate-400">Belum ada</span>
           )}
         </div>
 
