@@ -218,7 +218,8 @@ export default async function attendanceRoutes(app: FastifyInstance) {
       },
     });
 
-    const buckets = new Map<string, Record<string, number> & { label: string; key: string }>();
+    type SummaryBucket = Record<string, number> & { label: string; key: string };
+    const buckets = new Map<string, SummaryBucket>();
 
     for (const row of rows) {
       const key = groupBy === 'person' ? row.person.id : (row.person.class?.name ?? 'Tanpa Kelas');
@@ -226,7 +227,7 @@ export default async function attendanceRoutes(app: FastifyInstance) {
 
       let bucket = buckets.get(key);
       if (!bucket) {
-        bucket = { ...emptySummary(), key, label };
+        bucket = Object.assign(emptySummary(), { key, label });
         buckets.set(key, bucket);
       }
       const statusKey = row.status.toLowerCase();

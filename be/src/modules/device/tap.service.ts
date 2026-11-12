@@ -1,5 +1,5 @@
 import { PrismaClient, Prisma } from '@prisma/client';
-import { classify, toLocalParts, type RuleLike } from './classify.js';
+import { classify, toLocalParts, type PrayerSlot, type RuleLike } from './classify.js';
 import { applyTap, emptyDaily, type DailyState } from '../attendance/apply-tap.js';
 import { SCHOOL_TZ, toDateOnly } from '../../lib/time.js';
 
@@ -209,7 +209,14 @@ async function replay(prisma: PrismaClient, log: {
 }
 
 function buildResponse(
-  result: { decision: TapResponse['decision']; tapType: string | null; reason?: string | null; retryAfterSeconds?: number | null },
+  result: {
+    decision: TapResponse['decision'];
+    tapType: string | null;
+    prayerSlot?: PrayerSlot | null;
+    ruleId?: string | null;
+    reason?: string | null;
+    retryAfterSeconds?: number | null;
+  },
   person: { fullName: string; type: string; nis: string | null; nip: string | null; photoUrl: string | null; class: { name: string } | null } | null,
   status: string | null,
   at: Date,

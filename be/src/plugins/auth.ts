@@ -43,6 +43,14 @@ declare module '@fastify/jwt' {
     payload: AuthPayload;
     user: AuthPayload;
   }
+
+  // Plugin ini meregistrasi @fastify/jwt dua kali, dengan namespace `access` dan
+  // `refresh`. Saat namespace dipakai, setiap namespace menjadi instance JWT
+  // tersendiri di `app.jwt`, jadi tipenya perlu dideklarasikan eksplisit.
+  interface JWT {
+    access: Pick<JWT, 'sign' | 'verify' | 'decode'>;
+    refresh: Pick<JWT, 'sign' | 'verify' | 'decode'>;
+  }
 }
 
 export default fp(async (app) => {
