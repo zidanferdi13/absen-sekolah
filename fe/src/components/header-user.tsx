@@ -26,7 +26,7 @@ export function HeaderUser() {
     <div className="flex items-center gap-3">
       <div className="text-right">
         <div className="text-xs font-medium text-slate-800">{data?.name ?? '—'}</div>
-        <div className="text-[11px] text-slate-500">
+        <div className="text-2xs text-slate-500">
           {data ? (roleLabel[data.role] ?? data.role) : ''}
         </div>
       </div>
