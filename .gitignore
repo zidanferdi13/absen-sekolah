@@ -19,6 +19,9 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
+# TypeScript incremental build info
+*.tsbuildinfo
+
 # Editor
 .vscode/*
 !.vscode/extensions.json

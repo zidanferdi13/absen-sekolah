@@ -1,6 +1,7 @@
 'use client';
 
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { CalendarDays, ChevronDown } from 'lucide-react';
 
 export type PersonFilter = 'ALL' | 'STUDENT' | 'TEACHER';
@@ -70,12 +71,64 @@ interface FilterValue {
 const DashboardFilterContext = createContext<FilterValue | null>(null);
 
 export function DashboardFilterProvider({ children }: { children: React.ReactNode }) {
-  const [filter, setFilter] = useState<PersonFilter>('ALL');
-  const [preset, setPreset] = useState<RangePreset>('today');
-  const [range, setRange] = useState(() => rangeForPreset('today'));
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const initial = useMemo(() => {
+    const personType = searchParams.get('personType');
+    const initialFilter: PersonFilter =
+      personType === 'STUDENT' || personType === 'TEACHER' ? personType : 'ALL';
+
+    const fromParam = searchParams.get('from');
+    const toParam = searchParams.get('to');
+    const validRange =
+      fromParam &&
+      toParam &&
+      /^\d{4}-\d{2}-\d{2}$/.test(fromParam) &&
+      /^\d{4}-\d{2}-\d{2}$/.test(toParam) &&
+      fromParam <= toParam &&
+      diffDays(fromParam, toParam) <= MAX_RANGE_DAYS;
+
+    return {
+      filter: initialFilter,
+      preset: (validRange ? 'custom' : 'today') as RangePreset,
+      range: validRange ? { from: fromParam, to: toParam } : rangeForPreset('today'),
+    };
+  }, [searchParams]);
+
+  const [filter, setFilterState] = useState<PersonFilter>(initial.filter);
+  const [preset, setPreset] = useState<RangePreset>(initial.preset);
+  const [range, setRange] = useState(initial.range);
   const [rangeError, setRangeError] = useState<string | null>(null);
 
   const days = diffDays(range.from, range.to);
+
+  const syncUrl = useCallback(
+    (nextFilter: PersonFilter, nextRange: { from: string; to: string }) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (nextFilter === 'ALL') params.delete('personType');
+      else params.set('personType', nextFilter);
+      params.set('from', nextRange.from);
+      params.set('to', nextRange.to);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  const setFilter = useCallback(
+    (next: PersonFilter) => {
+      setFilterState(next);
+      syncUrl(next, range);
+    },
+    [range, syncUrl],
+  );
+
+  useEffect(() => {
+    setFilterState(initial.filter);
+    setPreset(initial.preset);
+    setRange(initial.range);
+  }, [initial]);
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -88,7 +141,11 @@ export function DashboardFilterProvider({ children }: { children: React.ReactNod
   function applyPreset(next: RangePreset) {
     setPreset(next);
     setRangeError(null);
-    if (next !== 'custom') setRange(rangeForPreset(next));
+    if (next !== 'custom') {
+      const nextRange = rangeForPreset(next);
+      setRange(nextRange);
+      syncUrl(filter, nextRange);
+    }
   }
 
   function setCustomRange(nextFrom: string, nextTo: string): boolean {
@@ -112,6 +169,7 @@ export function DashboardFilterProvider({ children }: { children: React.ReactNod
 
     setRangeError(null);
     setRange({ from: nextFrom, to: nextTo });
+    syncUrl(filter, { from: nextFrom, to: nextTo });
     return true;
   }
 
@@ -145,15 +203,22 @@ export function FilterToggle() {
   const { filter, setFilter } = useDashboardFilter();
 
   return (
-    <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5">
+    <div
+      role="tablist"
+      aria-label="Filter kelompok orang"
+      className="inline-flex rounded-lg border border-slate-200 bg-slate-50/80 p-0.5 shadow-sm"
+    >
       {PERSON_OPTIONS.map((option) => (
         <button
           key={option.value}
           type="button"
+          role="tab"
+          aria-selected={filter === option.value}
           onClick={() => setFilter(option.value)}
-          aria-pressed={filter === option.value}
-          className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-            filter === option.value ? 'bg-brand-500 text-white' : 'text-slate-600 hover:bg-slate-100'
+          className={`rounded-[6px] px-3 py-1.5 text-xs font-medium transition ${
+            filter === option.value
+              ? 'bg-white text-brand-700 shadow-sm ring-1 ring-inset ring-brand-100'
+              : 'text-slate-500 hover:text-slate-800'
           }`}
         >
           {option.label}
@@ -185,9 +250,9 @@ export function DateRangeFilter() {
           setLocalError(null);
           setOpen((value) => !value);
         }}
-        className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
       >
-        <CalendarDays className="h-3.5 w-3.5 text-slate-500" />
+        <CalendarDays className="h-3.5 w-3.5 text-brand-500" />
         {label}
         {days > 1 && <span className="text-slate-400">· {days} hari</span>}
         <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
@@ -196,7 +261,7 @@ export function DateRangeFilter() {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} aria-hidden />
-          <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-4 shadow-lg">
+          <div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-4 shadow-[var(--shadow-pop)]">
             <div className="mb-3 flex flex-wrap gap-1.5">
               {PRESETS.map((item) => (
                 <button
@@ -263,7 +328,7 @@ export function DateRangeFilter() {
               Terapkan
             </button>
 
-            <p className="mt-2 text-[11px] text-slate-400">Maksimum 366 hari.</p>
+            <p className="mt-2 text-2xs text-slate-400">Maksimum 366 hari.</p>
           </div>
         </>
       )}
